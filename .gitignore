@@ -1,42 +1,40 @@
-# Do NOT ignore .env.example
-!.env.example
-
-# Ignore real environment files
-.env
-.env.*
-*.env
-
-# Python cache
+# Bytecode & caching
 __pycache__/
 *.py[cod]
 *.pyo
-*.pyd
-*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Virtual environments
+# Virtual environments & tooling
 .venv/
 venv/
 env/
 ENV/
+.Python
+.tox/
 
-# Testing
-.pytest_cache/
-.mypy_cache/
-.coverage
-coverage.xml
-htmlcov/
-.ruff_cache/
+# Build / packaging
+build/
+dist/
+*.egg-info/
 
-# Editors/IDEs
+# Environment & secrets
+.env
+.env.*
+!.env.example
+.python-version
+
+# Editors / IDE
 .vscode/
 .idea/
 *.iml
 
-# OS junk files
+# OS cruft
 .DS_Store
 Thumbs.db
 
-# SQLite / data
+# Runtime data
 data/*.db
 data/*.sqlite
 data/*.sqlite3
@@ -45,4 +43,3 @@ data/session_cache.json
 # Logs
 logs/
 *.log
- 
