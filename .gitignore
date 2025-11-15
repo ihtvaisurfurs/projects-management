@@ -1,3 +1,10 @@
+# Environment/config secrets
+!.env.example
+.env
+.env.*
+*.env
+.python-version
+
 # Python cache/artifacts
 __pycache__/
 *.py[cod]
@@ -17,13 +24,6 @@ ENV/
 coverage.xml
 htmlcov/
 .ruff_cache/
-
-# Environment/config secrets
-!.env.example
-.env
-.env.*
-*.env
-.python-version
 
 # Editors/IDEs
 .vscode/
