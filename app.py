@@ -113,6 +113,9 @@ async def main() -> None:
                 f"خطای ارتباط با تلگرام: {exc}. تلاش مجدد پس از {settings.telegram_retry_delay} ثانیه."
             )
             await asyncio.sleep(settings.telegram_retry_delay)
+        except asyncio.CancelledError:
+            await log_service.info("Polling متوقف شد (Cancel).")
+            break
 
 
 if __name__ == "__main__":

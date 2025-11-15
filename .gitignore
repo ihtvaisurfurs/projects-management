@@ -1,0 +1,44 @@
+# Python cache/artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments & local tooling
+.venv/
+venv/
+env/
+ENV/
+.Python
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+.ruff_cache/
+
+# Environment/config secrets
+.env
+.env.*
+*.env
+.python-version
+
+# Editors/IDEs
+.vscode/
+.idea/
+*.iml
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Runtime data
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/session_cache.json
+
+# Logs
+logs/
+*.log
