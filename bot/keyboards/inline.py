@@ -2,7 +2,7 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from core.constants import ROLES, SKIP_OWNER_BUTTON, STATUS_CHOICES, STATUS_LABELS
+from core.constants import ROLES, VISIBLE_STATUSES, STATUS_LABELS
 
 
 class RoleCallback(CallbackData, prefix="role"):
@@ -33,7 +33,7 @@ def role_keyboard() -> InlineKeyboardMarkup:
 
 def status_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    for status in STATUS_CHOICES:
+    for status in VISIBLE_STATUSES:
         builder.button(
             text=STATUS_LABELS.get(status, status),
             callback_data=StatusCallback(value=status),
@@ -72,5 +72,23 @@ def project_profile_keyboard(project_id: int, is_admin: bool) -> InlineKeyboardM
             text="👥 تغییر مسئول پروژه",
             callback_data=ProjectActionCallback(project_id=project_id, action="owner"),
         )
+        builder.button(
+            text="🗑 حذف پروژه",
+            callback_data=ProjectActionCallback(project_id=project_id, action="delete"),
+        )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def delete_confirmation_keyboard(project_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="✅ تأیید حذف",
+        callback_data=ProjectActionCallback(project_id=project_id, action="delete_confirm"),
+    )
+    builder.button(
+        text="❌ انصراف",
+        callback_data=ProjectActionCallback(project_id=project_id, action="delete_cancel"),
+    )
     builder.adjust(1)
     return builder.as_markup()

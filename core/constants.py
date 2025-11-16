@@ -15,12 +15,14 @@ PROGRAMMER_MENU_BUTTONS = [
     BACK_TO_MENU,
 ]
 ROLES = ("admin", "programmer")
-STATUS_CHOICES = ["pending", "MVP", "support_update", "done"]
+STATUS_CHOICES = ["pending", "MVP", "support_update", "done", "deleted"]
+VISIBLE_STATUSES = ["pending", "MVP", "support_update", "done"]
 STATUS_LABELS = {
     "pending": "🟡 در انتظار",
     "MVP": "🟢 نسخه MVP",
     "support_update": "🔧 پشتیبانی و ارتقا",
     "done": "✅ تکمیل شده",
+    "deleted": "🗑 حذف شده",
 }
 PROJECT_GROUP_LABELS = {
     "pending": "پروژه‌های تعریف شده",
