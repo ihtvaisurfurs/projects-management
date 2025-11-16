@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from aiogram import F, Router, types
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
@@ -19,7 +21,7 @@ from services.menu_service import MenuService
 from services.project_service import ProjectService
 from services.session_manager import SessionManager
 from services.user_service import UserService
-from services.validators import is_valid_phone, parse_start_date
+from services.validators import is_valid_phone, parse_date
 
 router = Router()
 
@@ -155,8 +157,6 @@ async def capture_project_description(
     session_manager.add_inline_message(message.from_user.id, inline_message.message_id)
 
 
-
-
 @router.callback_query(StatusCallback.filter(), StateFilter(AdminCreateProject.waiting_status))
 async def select_project_status(
     callback: types.CallbackQuery,
@@ -227,11 +227,16 @@ async def capture_start_date(
             from bot.keyboards.reply import contact_request_keyboard
             await message.answer(fa.REQUEST_PHONE, reply_markup=contact_request_keyboard())
         return
-    formatted = parse_start_date(message.text)
+    formatted = parse_date(message.text)
     if not formatted:
         await message.answer(fa.INVALID_DATE)
         return
+    await state.update_data(project_start_date=formatted)
     data = await state.get_data()
+    if data.get("project_status") == "done":
+        await state.set_state(AdminCreateProject.waiting_end_date)
+        await message.answer(fa.ASK_PROJECT_END_DATE)
+        return
     profile = session_manager.get_profile(message.from_user.id)
     await project_service.create_project(
         title=data.get("project_title"),
@@ -239,6 +244,42 @@ async def capture_start_date(
         status=data.get("project_status"),
         owner_name=data.get("project_owner"),
         start_date=formatted,
+    )
+    await log_service.info(f"ادمین {profile['name']} پروژه‌ای جدید ایجاد کرد ({data.get('project_title')})")
+    await state.clear()
+    await message.answer(fa.PROJECT_CREATED)
+    await menu_service.show_main_menu(message, profile)
+
+
+@router.message(AdminCreateProject.waiting_end_date)
+async def capture_end_date(
+    message: types.Message,
+    state: FSMContext,
+    project_service: ProjectService,
+    session_manager: SessionManager,
+    log_service: LogService,
+    menu_service: MenuService,
+):
+    formatted = parse_date(message.text)
+    if not formatted:
+        await message.answer(fa.INVALID_DATE)
+        return
+    data = await state.get_data()
+    start_date = data.get("project_start_date")
+    if start_date:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(formatted, "%Y-%m-%d")
+        if end_dt < start_dt:
+            await message.answer(fa.INVALID_END_BEFORE_START)
+            return
+    profile = session_manager.get_profile(message.from_user.id)
+    await project_service.create_project(
+        title=data.get("project_title"),
+        description=data.get("project_description", ""),
+        status=data.get("project_status"),
+        owner_name=data.get("project_owner"),
+        start_date=start_date or formatted,
+        end_date=formatted,
     )
     await log_service.info(f"ادمین {profile['name']} پروژه‌ای جدید ایجاد کرد ({data.get('project_title')})")
     await state.clear()

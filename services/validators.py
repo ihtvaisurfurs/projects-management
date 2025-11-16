@@ -12,7 +12,7 @@ def is_valid_phone(phone: str) -> bool:
     return bool(PHONE_PATTERN.match(phone.strip()))
 
 
-def parse_start_date(value: str) -> Optional[str]:
+def parse_date(value: str) -> Optional[str]:
     value = value.strip()
     if not DATE_PATTERN.match(value):
         return None
@@ -23,3 +23,7 @@ def parse_start_date(value: str) -> Optional[str]:
         except ValueError:
             continue
     return None
+
+
+def parse_start_date(value: str) -> Optional[str]:
+    return parse_date(value)

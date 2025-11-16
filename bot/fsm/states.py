@@ -17,6 +17,7 @@ class AdminCreateProject(StatesGroup):
     waiting_status = State()
     waiting_owner = State()
     waiting_start_date = State()
+    waiting_end_date = State()
 
 
 class ProjectTitleUpdate(StatesGroup):
@@ -33,3 +34,4 @@ class ProjectOwnerUpdate(StatesGroup):
 
 class ProjectStatusUpdate(StatesGroup):
     waiting_status = State()
+    waiting_end_date = State()

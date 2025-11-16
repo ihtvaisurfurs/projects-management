@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from aiogram import Router, types
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
@@ -12,6 +14,7 @@ from bot.keyboards.inline import (
     OwnerCallback,
     ProjectActionCallback,
     StatusCallback,
+    delete_confirmation_keyboard,
     owner_keyboard,
     project_profile_keyboard,
     status_keyboard,
@@ -23,6 +26,7 @@ from services.project_formatter import project_profile_text
 from services.project_service import ProjectService
 from services.session_manager import SessionManager
 from services.user_service import UserService
+from services.validators import parse_date
 
 router = Router()
 
@@ -69,6 +73,7 @@ async def handle_project_action(
     project_service: ProjectService,
     session_manager: SessionManager,
     user_service: UserService,
+    log_service: LogService,
 ):
     project, profile = await _load_project(
         callback_data.project_id,
@@ -116,6 +121,28 @@ async def handle_project_action(
                 reply_markup=owner_keyboard(users),
             )
             session_manager.add_inline_message(callback.from_user.id, inline_message.message_id)
+    elif action == "delete":
+        if profile.get("role") != "admin":
+            await callback.answer(fa.UNAUTHORIZED, show_alert=True)
+            return
+        await callback.message.answer(fa.DELETE_CONFIRMATION, reply_markup=delete_confirmation_keyboard(project["id"]))
+
+    elif action == "delete_confirm":
+        if profile.get("role") != "admin":
+            await callback.answer(fa.UNAUTHORIZED, show_alert=True)
+            return
+        await project_service.soft_delete_project(project["id"])
+        await log_service.info(f"{profile['name']} پروژه {project['id']} را حذف کرد")
+        await callback.answer(fa.PROJECT_DELETED, show_alert=True)
+        await callback.message.answer(fa.PROJECT_DELETED)
+        await state.clear()
+        return
+    elif action == "delete_cancel":
+        if profile.get("role") != "admin":
+            await callback.answer(fa.UNAUTHORIZED, show_alert=True)
+            return
+        await callback.answer(fa.DELETE_CANCELLED, show_alert=True)
+        return
     await callback.answer()
 
 
@@ -143,6 +170,12 @@ async def update_status(
     if not project:
         await callback.answer()
         return
+    if callback_data.value == "done":
+        await state.update_data(edit_project_id=project_id, new_status="done")
+        await state.set_state(ProjectStatusUpdate.waiting_end_date)
+        await callback.message.answer(fa.ASK_PROJECT_END_DATE)
+        await callback.answer()
+        return
     await project_service.update_status(project_id, callback_data.value)
     updated = await project_service.get_project(project_id)
     await log_service.info(f"{profile['name']} وضعیت پروژه {project_id} را به‌روزرسانی کرد")
@@ -150,6 +183,44 @@ async def update_status(
     await callback.answer("✅ تغییر انجام شد")
     await callback.message.answer(fa.STATUS_UPDATED)
     await _send_profile(callback.message, updated, profile, session_manager)
+
+
+@router.message(ProjectStatusUpdate.waiting_end_date)
+async def capture_status_end_date(
+    message: types.Message,
+    state: FSMContext,
+    project_service: ProjectService,
+    session_manager: SessionManager,
+    log_service: LogService,
+):
+    formatted = parse_date(message.text)
+    if not formatted:
+        await message.answer(fa.INVALID_DATE)
+        return
+    data = await state.get_data()
+    project_id = data.get("edit_project_id")
+    project, profile = await _load_project(
+        project_id,
+        message.from_user.id,
+        project_service,
+        session_manager,
+        message,
+    )
+    if not project:
+        return
+    start_date = project.get("start_date")
+    if start_date:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(formatted, "%Y-%m-%d")
+        if end_dt < start_dt:
+            await message.answer(fa.INVALID_END_BEFORE_START)
+            return
+    await project_service.update_status(project_id, "done", end_date=formatted)
+    updated = await project_service.get_project(project_id)
+    await log_service.info(f"{profile['name']} وضعیت پروژه {project_id} را به‌روزرسانی کرد")
+    await state.clear()
+    await message.answer(fa.STATUS_UPDATED)
+    await _send_profile(message, updated, profile, session_manager)
 
 
 @router.message(ProjectTitleUpdate.waiting_title)
@@ -238,3 +309,5 @@ async def update_owner(
     await callback.answer("✅ مسئول تغییر کرد")
     await callback.message.answer(fa.OWNER_UPDATED)
     await _send_profile(callback.message, updated, profile, session_manager)
+
+
