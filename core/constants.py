@@ -4,9 +4,14 @@ BACK_TO_MENU = "↩️ برگشت به منوی اصلی"
 REQUEST_PHONE_BUTTON = "📱 ارسال شماره همراه من"
 ADMIN_MENU_BUTTONS = [
     "📊 وضعیت پروژه ها",
-    "👤 تعریف کاربر جدید",
+    "👥 کاربرها",
     "➕ تعریف پروژه",
     "🛠 آپدیت پروژه",
+    BACK_TO_MENU,
+]
+USER_MENU_BUTTONS = [
+    "📄 لیست کاربران",
+    "👤 تعریف کاربر جدید",
     BACK_TO_MENU,
 ]
 PROGRAMMER_MENU_BUTTONS = [

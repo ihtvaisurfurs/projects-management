@@ -13,7 +13,13 @@ from bot.keyboards.inline import (
     role_keyboard,
     status_keyboard,
 )
-from bot.keyboards.reply import back_keyboard, contact_request_keyboard, description_keyboard, owner_skip_keyboard
+from bot.keyboards.reply import (
+    back_keyboard,
+    contact_request_keyboard,
+    description_keyboard,
+    owner_skip_keyboard,
+    user_menu_keyboard,
+)
 from bot.texts import fa
 from core.constants import BACK_TO_MENU, SKIP_DESCRIPTION_BUTTON, SKIP_OWNER_BUTTON
 from services.logging_service import LogService
@@ -31,6 +37,42 @@ def _ensure_admin(message: types.Message, session_manager: SessionManager):
     if not profile or profile.get("role") != "admin":
         return None
     return profile
+
+
+@router.message(F.text == "👥 کاربرها")
+async def user_menu(
+    message: types.Message,
+    state: FSMContext,
+    session_manager: SessionManager,
+):
+    profile = _ensure_admin(message, session_manager)
+    if not profile:
+        await message.answer(fa.UNAUTHORIZED)
+        return
+    await state.clear()
+    await message.answer("یکی از گزینه‌های کاربری را انتخاب کنید:", reply_markup=user_menu_keyboard())
+
+
+@router.message(F.text == "📄 لیست کاربران")
+async def list_users(
+    message: types.Message,
+    session_manager: SessionManager,
+    user_service: UserService,
+    log_service: LogService,
+):
+    profile = _ensure_admin(message, session_manager)
+    if not profile:
+        await message.answer(fa.UNAUTHORIZED)
+        return
+    users = await user_service.list_users()
+    if not users:
+        await message.answer(fa.USER_LIST_EMPTY)
+        return
+    lines = [fa.USER_LIST_TITLE]
+    for user in users:
+        lines.append(f"• {user['name']}")
+    await message.answer("\n".join(lines))
+    await log_service.info(f"{profile['name']} لیست کاربران را مشاهده کرد")
 
 
 @router.message(F.text == "👤 تعریف کاربر جدید")

@@ -2,6 +2,7 @@ from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
 from core.constants import (
     ADMIN_MENU_BUTTONS,
+    USER_MENU_BUTTONS,
     BACK_TO_MENU,
     PROGRAMMER_MENU_BUTTONS,
     REQUEST_PHONE_BUTTON,
@@ -29,6 +30,15 @@ def admin_menu_keyboard() -> ReplyKeyboardMarkup:
             KeyboardButton(text=ADMIN_MENU_BUTTONS[3]),
         ],
         [KeyboardButton(text=ADMIN_MENU_BUTTONS[4])],
+    ]
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
+
+
+def user_menu_keyboard() -> ReplyKeyboardMarkup:
+    rows = [
+        [KeyboardButton(text=USER_MENU_BUTTONS[0])],
+        [KeyboardButton(text=USER_MENU_BUTTONS[1])],
+        [KeyboardButton(text=USER_MENU_BUTTONS[2])],
     ]
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
