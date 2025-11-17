@@ -56,7 +56,7 @@ class ProjectService:
 
     async def list_for_updates(self, role: str, owner_name: Optional[str]) -> List[dict]:
         params = []
-        base_query = "SELECT id, title FROM projects WHERE status != 'deleted'"
+        base_query = "SELECT id, title, status FROM projects WHERE status != 'deleted'"
         if role != "admin":
             base_query += " AND owner_name = ?"
             params.append(owner_name)
