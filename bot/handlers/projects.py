@@ -1,6 +1,7 @@
 from datetime import datetime
+from html import escape
 
-from aiogram import Router, types
+from aiogram import F, Router, types
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 
@@ -55,6 +56,10 @@ async def _load_project(
     if not profile:
         await target.answer(fa.REQUEST_PHONE, reply_markup=contact_request_keyboard())
         return None, None
+    if not profile.get("active", 1):
+        session_manager.clear_profile(user_id)
+        await target.answer(fa.USER_INACTIVE)
+        return None, None
     project = await project_service.get_project(project_id)
     if not project:
         await target.answer(fa.PROJECT_NOT_FOUND)
@@ -63,6 +68,38 @@ async def _load_project(
         await target.answer(fa.UNAUTHORIZED)
         return None, profile
     return project, profile
+
+
+@router.message(F.text == "📊 وضعیت پروژه ها")
+async def show_project_links(
+    message: types.Message,
+    session_manager: SessionManager,
+    project_service: ProjectService,
+    log_service: LogService,
+    bot_username: str,
+):
+    profile = session_manager.get_profile(message.from_user.id)
+    if not profile:
+        await message.answer(fa.REQUEST_PHONE, reply_markup=contact_request_keyboard())
+        return
+    if not profile.get("active", 1):
+        session_manager.clear_profile(message.from_user.id)
+        await message.answer(fa.USER_INACTIVE)
+        return
+    projects = await project_service.list_for_updates(profile.get("role"), profile.get("name"))
+    if not projects:
+        if profile.get("role") == "admin":
+            await message.answer(fa.NO_PROJECTS_AVAILABLE)
+        else:
+            await message.answer(fa.NO_PROJECT_ASSIGNED)
+        return
+    items = [
+        f"• <a href=\"https://t.me/{bot_username}?start=project_{project['id']}\">{escape(project['title'])}</a>"
+        for project in projects
+    ]
+    response = "\n".join([fa.UPDATE_SELECT_PROJECT, *items])
+    await message.answer(response, disable_web_page_preview=True)
+    await log_service.info(f"{profile['name']} فهرست پروژه‌ها را مشاهده کرد")
 
 
 @router.callback_query(ProjectActionCallback.filter())
@@ -293,7 +330,14 @@ async def update_owner(
     log_service: LogService,
 ):
     profile = session_manager.get_profile(callback.from_user.id)
-    if not profile or profile.get("role") != "admin":
+    if not profile:
+        await callback.answer(fa.UNAUTHORIZED, show_alert=True)
+        return
+    if not profile.get("active", 1):
+        session_manager.clear_profile(callback.from_user.id)
+        await callback.answer(fa.USER_INACTIVE, show_alert=True)
+        return
+    if profile.get("role") != "admin":
         await callback.answer(fa.UNAUTHORIZED, show_alert=True)
         return
     user = await user_service.get_by_id(callback_data.user_id)

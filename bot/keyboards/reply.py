@@ -25,11 +25,8 @@ def admin_menu_keyboard() -> ReplyKeyboardMarkup:
             KeyboardButton(text=ADMIN_MENU_BUTTONS[0]),
             KeyboardButton(text=ADMIN_MENU_BUTTONS[1]),
         ],
-        [
-            KeyboardButton(text=ADMIN_MENU_BUTTONS[2]),
-            KeyboardButton(text=ADMIN_MENU_BUTTONS[3]),
-        ],
-        [KeyboardButton(text=ADMIN_MENU_BUTTONS[4])],
+        [KeyboardButton(text=ADMIN_MENU_BUTTONS[2])],
+        [KeyboardButton(text=ADMIN_MENU_BUTTONS[3])],
     ]
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 

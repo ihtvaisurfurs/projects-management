@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+﻿from dataclasses import dataclass
 
 BACK_TO_MENU = "↩️ برگشت به منوی اصلی"
 REQUEST_PHONE_BUTTON = "📱 ارسال شماره همراه من"
@@ -6,7 +6,6 @@ ADMIN_MENU_BUTTONS = [
     "📊 وضعیت پروژه ها",
     "👥 کاربرها",
     "➕ تعریف پروژه",
-    "🛠 آپدیت پروژه",
     BACK_TO_MENU,
 ]
 USER_MENU_BUTTONS = [
@@ -16,7 +15,6 @@ USER_MENU_BUTTONS = [
 ]
 PROGRAMMER_MENU_BUTTONS = [
     "📊 وضعیت پروژه ها",
-    "🛠 آپدیت پروژه",
     BACK_TO_MENU,
 ]
 ROLES = ("admin", "programmer")
