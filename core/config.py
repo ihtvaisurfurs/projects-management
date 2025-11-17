@@ -42,6 +42,7 @@ class Settings:
     telegram_proxy: Optional[str]
     telegram_request_timeout: float
     telegram_retry_delay: float
+    updates_group_id: Optional[int]
 
     @classmethod
     def load(cls) -> "Settings":
@@ -51,6 +52,8 @@ class Settings:
             raise ValueError("BOT_TOKEN در فایل .env تعریف نشده است")
         if not username:
             raise ValueError("BOT_USERNAME در فایل .env تعریف نشده است")
+        group_raw = os.getenv("UPDATES_GROUP_ID", "").strip()
+        group_id = int(group_raw) if group_raw else None
         return cls(
             bot_token=token,
             bot_username=username,
@@ -62,4 +65,5 @@ class Settings:
             telegram_proxy=_optional_env("TELEGRAM_PROXY"),
             telegram_request_timeout=_float_env("TELEGRAM_REQUEST_TIMEOUT", 60.0),
             telegram_retry_delay=_float_env("TELEGRAM_RETRY_DELAY", 5.0),
+            updates_group_id=group_id,
         )

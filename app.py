@@ -96,12 +96,14 @@ async def main() -> None:
             "menu_service": menu_service,
             "log_service": log_service,
             "bot_username": settings.bot_username,
+            "updates_group_id": settings.updates_group_id,
         }
     )
 
     @dp.error()
-    async def error_handler(event, exception):
-        await log_service.error(f"خطا: {exception}")
+    async def error_handler(event):
+        exc = getattr(event, "exception", None)
+        await log_service.error(f"خطا: {exc}")
         return True
 
     while True:
