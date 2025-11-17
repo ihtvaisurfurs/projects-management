@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 from aiogram import F, Router, types
 from aiogram.filters import StateFilter
@@ -9,9 +9,12 @@ from bot.keyboards.inline import (
     OwnerCallback,
     RoleCallback,
     StatusCallback,
+    UserActionCallback,
     owner_keyboard,
     role_keyboard,
     status_keyboard,
+    user_list_keyboard,
+    user_profile_keyboard,
 )
 from bot.keyboards.reply import (
     back_keyboard,
@@ -32,9 +35,32 @@ from services.validators import is_valid_phone, parse_date
 router = Router()
 
 
-def _ensure_admin(message: types.Message, session_manager: SessionManager):
+async def _ensure_admin(message: types.Message, session_manager: SessionManager):
     profile = session_manager.get_profile(message.from_user.id)
-    if not profile or profile.get("role") != "admin":
+    if not profile:
+        await message.answer(fa.REQUEST_PHONE, reply_markup=contact_request_keyboard())
+        return None
+    if not profile.get("active", 1):
+        session_manager.clear_profile(message.from_user.id)
+        await message.answer(fa.USER_INACTIVE)
+        return None
+    if profile.get("role") != "admin":
+        await message.answer(fa.UNAUTHORIZED)
+        return None
+    return profile
+
+
+async def _ensure_admin_callback(callback: types.CallbackQuery, session_manager: SessionManager):
+    profile = session_manager.get_profile(callback.from_user.id)
+    if not profile:
+        await callback.answer(fa.UNAUTHORIZED, show_alert=True)
+        return None
+    if not profile.get("active", 1):
+        session_manager.clear_profile(callback.from_user.id)
+        await callback.answer(fa.USER_INACTIVE, show_alert=True)
+        return None
+    if profile.get("role") != "admin":
+        await callback.answer(fa.UNAUTHORIZED, show_alert=True)
         return None
     return profile
 
@@ -45,9 +71,8 @@ async def user_menu(
     state: FSMContext,
     session_manager: SessionManager,
 ):
-    profile = _ensure_admin(message, session_manager)
+    profile = await _ensure_admin(message, session_manager)
     if not profile:
-        await message.answer(fa.UNAUTHORIZED)
         return
     await state.clear()
     await message.answer("یکی از گزینه‌های کاربری را انتخاب کنید:", reply_markup=user_menu_keyboard())
@@ -60,20 +85,70 @@ async def list_users(
     user_service: UserService,
     log_service: LogService,
 ):
-    profile = _ensure_admin(message, session_manager)
+    profile = await _ensure_admin(message, session_manager)
     if not profile:
-        await message.answer(fa.UNAUTHORIZED)
         return
     users = await user_service.list_users()
     if not users:
         await message.answer(fa.USER_LIST_EMPTY)
         return
-    lines = [fa.USER_LIST_TITLE]
-    for user in users:
-        lines.append(f"• {user['name']}")
-    await message.answer("\n".join(lines))
+    await message.answer(
+        fa.USER_LIST_TITLE,
+        reply_markup=user_list_keyboard(users),
+    )
     await log_service.info(f"{profile['name']} لیست کاربران را مشاهده کرد")
 
+
+@router.callback_query(UserActionCallback.filter())
+async def handle_user_actions(
+    callback: types.CallbackQuery,
+    callback_data: UserActionCallback,
+    user_service: UserService,
+    session_manager: SessionManager,
+    log_service: LogService,
+):
+    profile = await _ensure_admin_callback(callback, session_manager)
+    if not profile:
+        return
+    user = await user_service.get_by_id(callback_data.user_id)
+    if not user:
+        await callback.answer(fa.GENERIC_ERROR, show_alert=True)
+        return
+    action = callback_data.action
+    if action == "view":
+        status = "فعال" if user.get("active", 1) else "غیرفعال"
+        details = (
+            f"👤 نام: {user['name']}\n"
+            f"📞 تلفن: {user['phone']}\n"
+            f"🎯 نقش: {user['role']}\n"
+            f"📅 ثبت: {user.get('created_at','—')}\n"
+            f"وضعیت: {status}"
+        )
+        await callback.message.answer(
+            details,
+            reply_markup=user_profile_keyboard(user["id"], bool(user.get("active", 1))),
+        )
+        await callback.answer()
+        return
+    if action in {"deactivate", "activate"}:
+        new_state = action == "activate"
+        await user_service.set_active(user["id"], new_state)
+        updated_user = await user_service.get_by_id(callback_data.user_id)
+        telegram_id = updated_user.get("telegram_id") if updated_user else None
+        if telegram_id:
+            if new_state:
+                session_manager.set_profile(telegram_id, updated_user)
+            else:
+                session_manager.clear_profile(telegram_id)
+        await log_service.info(
+            f"{profile['name']} وضعیت کاربر {user['name']} را به {'فعال' if new_state else 'غیرفعال'} تغییر داد"
+        )
+        await callback.answer(
+            fa.USER_ACTIVATED if new_state else fa.USER_DEACTIVATED,
+            show_alert=True,
+        )
+        return
+    await callback.answer()
 
 @router.message(F.text == "👤 تعریف کاربر جدید")
 async def new_user_entry(
@@ -81,9 +156,8 @@ async def new_user_entry(
     state: FSMContext,
     session_manager: SessionManager,
 ):
-    profile = _ensure_admin(message, session_manager)
+    profile = await _ensure_admin(message, session_manager)
     if not profile:
-        await message.answer(fa.UNAUTHORIZED)
         return
     await state.set_state(AdminCreateUser.waiting_phone)
     await message.answer(fa.ASK_NEW_USER_PHONE, reply_markup=back_keyboard())
@@ -130,9 +204,8 @@ async def select_user_role(
     menu_service: MenuService,
     log_service: LogService,
 ):
-    profile = session_manager.get_profile(callback.from_user.id)
-    if not profile or profile.get("role") != "admin":
-        await callback.answer(fa.UNAUTHORIZED, show_alert=True)
+    profile = await _ensure_admin_callback(callback, session_manager)
+    if not profile:
         return
     data = await state.get_data()
     phone = data.get("new_user_phone")
@@ -158,9 +231,8 @@ async def create_project_entry(
     state: FSMContext,
     session_manager: SessionManager,
 ):
-    profile = _ensure_admin(message, session_manager)
+    profile = await _ensure_admin(message, session_manager)
     if not profile:
-        await message.answer(fa.UNAUTHORIZED)
         return
     await state.set_state(AdminCreateProject.waiting_title)
     await message.answer(fa.ASK_PROJECT_TITLE, reply_markup=back_keyboard())
@@ -207,9 +279,8 @@ async def select_project_status(
     session_manager: SessionManager,
     user_service: UserService,
 ):
-    profile = session_manager.get_profile(callback.from_user.id)
-    if not profile or profile.get("role") != "admin":
-        await callback.answer(fa.UNAUTHORIZED, show_alert=True)
+    profile = await _ensure_admin_callback(callback, session_manager)
+    if not profile:
         return
     await state.update_data(project_status=callback_data.value)
     await state.set_state(AdminCreateProject.waiting_owner)
@@ -235,7 +306,11 @@ async def select_project_owner(
     callback_data: OwnerCallback,
     state: FSMContext,
     user_service: UserService,
+    session_manager: SessionManager,
 ):
+    profile = await _ensure_admin_callback(callback, session_manager)
+    if not profile:
+        return
     user = await user_service.get_by_id(callback_data.user_id)
     owner_name = user["name"] if user else None
     await state.update_data(project_owner=owner_name)
@@ -327,3 +402,5 @@ async def capture_end_date(
     await state.clear()
     await message.answer(fa.PROJECT_CREATED)
     await menu_service.show_main_menu(message, profile)
+
+

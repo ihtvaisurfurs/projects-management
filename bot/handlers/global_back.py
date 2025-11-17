@@ -21,6 +21,10 @@ async def global_back_handler(
     await state.clear()
     await cleanup_inline_messages(message, session_manager)
     profile = session_manager.get_profile(message.from_user.id)
+    if profile and not profile.get("active", 1):
+        session_manager.clear_profile(message.from_user.id)
+        await message.answer(fa.USER_INACTIVE)
+        return
     if profile:
         await menu_service.show_main_menu(message, profile)
     else:

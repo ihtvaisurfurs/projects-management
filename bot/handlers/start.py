@@ -1,3 +1,5 @@
+from typing import Optional
+
 from aiogram import F, Router, types
 from aiogram.filters import CommandStart
 from aiogram.filters.command import CommandObject
@@ -35,6 +37,26 @@ async def _show_project_profile(
     session_manager.add_inline_message(message.from_user.id, sent.message_id)
 
 
+async def _resolve_profile(
+    user_id: int,
+    session_manager: SessionManager,
+    user_service: UserService,
+) -> tuple[Optional[dict], bool]:
+    profile = session_manager.get_profile(user_id)
+    if profile and not profile.get("active", 1):
+        session_manager.clear_profile(user_id)
+        return None, True
+    if profile:
+        return profile, False
+    db_user = await user_service.get_by_telegram(user_id)
+    if db_user:
+        if not db_user.get("active", 1):
+            return None, True
+        session_manager.set_profile(user_id, db_user)
+        return db_user, False
+    return None, False
+
+
 @router.message(CommandStart())
 async def command_start(
     message: types.Message,
@@ -49,12 +71,10 @@ async def command_start(
     await state.clear()
     user_id = message.from_user.id
     deep_link = parse_start_param(command.args)
-    profile = session_manager.get_profile(user_id)
-    if not profile:
-        db_user = await user_service.get_by_telegram(user_id)
-        if db_user:
-            session_manager.set_profile(user_id, db_user)
-            profile = db_user
+    profile, inactive = await _resolve_profile(user_id, session_manager, user_service)
+    if inactive:
+        await message.answer(fa.USER_INACTIVE)
+        return
     if deep_link and deep_link.type == "project":
         if profile:
             project = await project_service.get_project(deep_link.entity_id)
@@ -102,7 +122,11 @@ async def handle_contact(
     if not user:
         await message.answer(fa.PHONE_NOT_FOUND)
         return
+    if not user.get("active", 1):
+        await message.answer(fa.USER_INACTIVE)
+        return
     await user_service.update_telegram_id(user["id"], message.from_user.id)
+    user["telegram_id"] = message.from_user.id
     session_manager.set_profile(message.from_user.id, user)
     await log_service.info(f"کاربر {user['name']} وارد شد")
     data = await state.get_data()
