@@ -1,6 +1,6 @@
 from typing import Optional
 
-from aiogram import F, Router, types
+from aiogram import Bot, F, Router, types
 from aiogram.filters import CommandStart
 from aiogram.filters.command import CommandObject
 from aiogram.fsm.context import FSMContext
@@ -37,24 +37,25 @@ async def _show_project_profile(
     session_manager.add_inline_message(message.from_user.id, sent.message_id)
 
 
+async def _send_project_to_chat(bot: Bot, chat_id: int, project: dict) -> None:
+    await bot.send_message(chat_id=chat_id, text=project_profile_text(project))
+
+
 async def _resolve_profile(
     user_id: int,
     session_manager: SessionManager,
     user_service: UserService,
 ) -> tuple[Optional[dict], bool]:
     profile = session_manager.get_profile(user_id)
-    if profile and not profile.get("active", 1):
-        session_manager.clear_profile(user_id)
-        return None, True
-    if profile:
-        return profile, False
     db_user = await user_service.get_by_telegram(user_id)
-    if db_user:
-        if not db_user.get("active", 1):
-            return None, True
+    if not db_user or not db_user.get("active", 1):
+        if profile:
+            session_manager.clear_profile(user_id)
+        return None, True if profile else False
+    if not profile or profile != db_user:
         session_manager.set_profile(user_id, db_user)
         return db_user, False
-    return None, False
+    return profile, False
 
 
 @router.message(CommandStart())
@@ -68,12 +69,22 @@ async def command_start(
     log_service: LogService,
     user_service: UserService,
 ):
+    if message.chat.type != "private":
+        return
     await state.clear()
     user_id = message.from_user.id
     deep_link = parse_start_param(command.args)
     profile, inactive = await _resolve_profile(user_id, session_manager, user_service)
     if inactive:
         await message.answer(fa.USER_INACTIVE)
+        return
+    if deep_link and deep_link.type == "group_project":
+        project = await project_service.get_project(deep_link.entity_id)
+        if not project:
+            await message.answer(fa.PROJECT_NOT_FOUND)
+            return
+        target_chat = deep_link.chat_id or message.chat.id
+        await _send_project_to_chat(message.bot, target_chat, project)
         return
     if deep_link and deep_link.type == "project":
         if profile:

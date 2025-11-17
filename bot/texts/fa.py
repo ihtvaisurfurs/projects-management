@@ -24,6 +24,7 @@ NO_PROJECT_ASSIGNED = "ℹ️ هیچ پروژه‌ای به شما تخصیص د
 PROJECT_LIST_HEADER = "📁 آخرین وضعیت پروژه‌ها:"
 UPDATE_SELECT_PROJECT = "🔗 برای ویرایش، روی لینک پروژه موردنظر بزنید."
 NO_PROJECTS_AVAILABLE = "هیچ پروژه‌ای برای نمایش وجود ندارد."
+NO_PROJECTS_IN_STATUS = "هیچ پروژه‌ای با این وضعیت وجود ندارد."
 UNAUTHORIZED = "⛔️ دسترسی لازم برای انجام این عملیات را ندارید."
 PROJECT_NOT_FOUND = "❗️ پروژه موردنظر پیدا نشد."
 STATUS_UPDATED = "✅ وضعیت پروژه با موفقیت تغییر کرد."

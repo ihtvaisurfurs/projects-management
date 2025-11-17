@@ -2,7 +2,7 @@ from datetime import datetime
 from html import escape
 
 from aiogram import F, Router, types
-from aiogram.filters import StateFilter
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 
 from bot.fsm.states import (
@@ -12,16 +12,21 @@ from bot.fsm.states import (
     ProjectTitleUpdate,
 )
 from bot.keyboards.inline import (
+    GroupProjectCallback,
+    GroupStatusCallback,
     OwnerCallback,
     ProjectActionCallback,
     StatusCallback,
     delete_confirmation_keyboard,
+    group_projects_keyboard,
+    group_status_filter_keyboard,
     owner_keyboard,
     project_profile_keyboard,
     status_keyboard,
 )
 from bot.keyboards.reply import back_keyboard, contact_request_keyboard
 from bot.texts import fa
+from core.constants import STATUS_LABELS
 from services.logging_service import LogService
 from services.project_formatter import project_profile_text
 from services.project_service import ProjectService
@@ -44,15 +49,22 @@ async def _send_profile(
     )
     session_manager.add_inline_message(message.from_user.id, sent.message_id)
 
+async def _notify_group(bot, updates_group_id, project: dict, prefix: str) -> None:
+    if not updates_group_id:
+        return
+    text = f"{prefix}\n{project_profile_text(project)}"
+    await bot.send_message(chat_id=updates_group_id, text=text)
+
 
 async def _load_project(
     project_id: int,
     user_id: int,
     project_service: ProjectService,
     session_manager: SessionManager,
+    user_service: UserService,
     target: types.Message,
 ):
-    profile = session_manager.get_profile(user_id)
+    profile = await session_manager.ensure_profile(user_id, user_service)
     if not profile:
         await target.answer(fa.REQUEST_PHONE, reply_markup=contact_request_keyboard())
         return None, None
@@ -77,8 +89,11 @@ async def show_project_links(
     project_service: ProjectService,
     log_service: LogService,
     bot_username: str,
+    user_service: UserService,
 ):
-    profile = session_manager.get_profile(message.from_user.id)
+    if message.chat.type != "private":
+        return
+    profile = await session_manager.ensure_profile(message.from_user.id, user_service)
     if not profile:
         await message.answer(fa.REQUEST_PHONE, reply_markup=contact_request_keyboard())
         return
@@ -102,6 +117,36 @@ async def show_project_links(
     await log_service.info(f"{profile['name']} فهرست پروژه‌ها را مشاهده کرد")
 
 
+@router.message(Command("status"))
+async def group_status(
+    message: types.Message,
+    session_manager: SessionManager,
+    project_service: ProjectService,
+    log_service: LogService,
+    bot_username: str,
+    user_service: UserService,
+    updates_group_id: int | None,
+):
+    if message.chat.type not in {"group", "supergroup"}:
+        return
+    profile = await session_manager.ensure_profile(message.from_user.id, user_service)
+    if not profile or profile.get("role") != "admin":
+        return
+    projects = await project_service.list_for_updates("admin", None)
+    if not projects:
+        await message.answer(fa.NO_PROJECTS_AVAILABLE)
+        return
+    await message.answer(
+        fa.UPDATE_SELECT_PROJECT,
+        reply_markup=group_projects_keyboard(projects),
+    )
+    await message.answer(
+        "فیلتر بر اساس وضعیت:",
+        reply_markup=group_status_filter_keyboard(),
+    )
+    await log_service.info(f"{profile['name']} فهرست پروژه‌ها را در گروه {message.chat.id} ارسال کرد")
+
+
 @router.callback_query(ProjectActionCallback.filter())
 async def handle_project_action(
     callback: types.CallbackQuery,
@@ -117,6 +162,7 @@ async def handle_project_action(
         callback.from_user.id,
         project_service,
         session_manager,
+        user_service,
         callback.message,
     )
     if not project:
@@ -191,6 +237,8 @@ async def update_status(
     project_service: ProjectService,
     session_manager: SessionManager,
     log_service: LogService,
+    user_service: UserService,
+    updates_group_id: int | None,
 ):
     data = await state.get_data()
     project_id = data.get("edit_project_id")
@@ -202,6 +250,7 @@ async def update_status(
         callback.from_user.id,
         project_service,
         session_manager,
+        user_service,
         callback.message,
     )
     if not project:
@@ -216,6 +265,7 @@ async def update_status(
     await project_service.update_status(project_id, callback_data.value)
     updated = await project_service.get_project(project_id)
     await log_service.info(f"{profile['name']} وضعیت پروژه {project_id} را به‌روزرسانی کرد")
+    await _notify_group(callback.message.bot, updates_group_id, updated, "پروژه آپدیت شد")
     await state.clear()
     await callback.answer("✅ تغییر انجام شد")
     await callback.message.answer(fa.STATUS_UPDATED)
@@ -229,6 +279,8 @@ async def capture_status_end_date(
     project_service: ProjectService,
     session_manager: SessionManager,
     log_service: LogService,
+    user_service: UserService,
+    updates_group_id: int | None,
 ):
     formatted = parse_date(message.text)
     if not formatted:
@@ -241,6 +293,7 @@ async def capture_status_end_date(
         message.from_user.id,
         project_service,
         session_manager,
+        user_service,
         message,
     )
     if not project:
@@ -255,6 +308,7 @@ async def capture_status_end_date(
     await project_service.update_status(project_id, "done", end_date=formatted)
     updated = await project_service.get_project(project_id)
     await log_service.info(f"{profile['name']} وضعیت پروژه {project_id} را به‌روزرسانی کرد")
+    await _notify_group(message.bot, updates_group_id, updated, "پروژه آپدیت شد")
     await state.clear()
     await message.answer(fa.STATUS_UPDATED)
     await _send_profile(message, updated, profile, session_manager)
@@ -267,6 +321,8 @@ async def apply_new_title(
     project_service: ProjectService,
     session_manager: SessionManager,
     log_service: LogService,
+    user_service: UserService,
+    updates_group_id: int | None,
 ):
     title = message.text.strip()
     if len(title) < 3:
@@ -279,14 +335,16 @@ async def apply_new_title(
         message.from_user.id,
         project_service,
         session_manager,
+        user_service,
         message,
     )
     if not project:
         return
     await project_service.update_title(project_id, title)
     await log_service.info(f"{profile['name']} عنوان پروژه {project_id} را تغییر داد")
-    await state.clear()
     updated = await project_service.get_project(project_id)
+    await _notify_group(message.bot, updates_group_id, updated, "پروژه آپدیت شد")
+    await state.clear()
     await message.answer(fa.TITLE_UPDATED)
     await _send_profile(message, updated, profile, session_manager)
 
@@ -298,6 +356,8 @@ async def apply_new_description(
     project_service: ProjectService,
     session_manager: SessionManager,
     log_service: LogService,
+    user_service: UserService,
+    updates_group_id: int | None,
 ):
     description = message.text.strip()
     data = await state.get_data()
@@ -307,14 +367,16 @@ async def apply_new_description(
         message.from_user.id,
         project_service,
         session_manager,
+        user_service,
         message,
     )
     if not project:
         return
     await project_service.update_description(project_id, description)
     await log_service.info(f"{profile['name']} توضیحات پروژه {project_id} را تغییر داد")
-    await state.clear()
     updated = await project_service.get_project(project_id)
+    await _notify_group(message.bot, updates_group_id, updated, "پروژه آپدیت شد")
+    await state.clear()
     await message.answer(fa.DESCRIPTION_UPDATED)
     await _send_profile(message, updated, profile, session_manager)
 
@@ -328,8 +390,9 @@ async def update_owner(
     project_service: ProjectService,
     session_manager: SessionManager,
     log_service: LogService,
+    updates_group_id: int | None,
 ):
-    profile = session_manager.get_profile(callback.from_user.id)
+    profile = await session_manager.ensure_profile(callback.from_user.id, user_service)
     if not profile:
         await callback.answer(fa.UNAUTHORIZED, show_alert=True)
         return
@@ -348,10 +411,52 @@ async def update_owner(
     project_id = data.get("edit_project_id")
     await project_service.update_owner(project_id, user["name"])
     await log_service.info(f"{profile['name']} مسئول پروژه {project_id} را به {user['name']} تغییر داد")
-    await state.clear()
     updated = await project_service.get_project(project_id)
+    await _notify_group(callback.message.bot, updates_group_id, updated, "پروژه آپدیت شد")
+    await state.clear()
     await callback.answer("✅ مسئول تغییر کرد")
     await callback.message.answer(fa.OWNER_UPDATED)
     await _send_profile(callback.message, updated, profile, session_manager)
+
+
+@router.callback_query(GroupProjectCallback.filter())
+async def show_group_project(
+    callback: types.CallbackQuery,
+    callback_data: GroupProjectCallback,
+    project_service: ProjectService,
+):
+    # Only respond in the same group/supergroup context
+    chat = callback.message.chat if callback.message else None
+    if not chat or chat.type not in {"group", "supergroup"}:
+        await callback.answer()
+        return
+    project = await project_service.get_project(callback_data.project_id)
+    if not project:
+        await callback.answer(fa.PROJECT_NOT_FOUND, show_alert=True)
+        return
+    await callback.answer()
+    await callback.message.answer(project_profile_text(project))
+
+
+@router.callback_query(GroupStatusCallback.filter())
+async def show_projects_by_status(
+    callback: types.CallbackQuery,
+    callback_data: GroupStatusCallback,
+    project_service: ProjectService,
+):
+    chat = callback.message.chat if callback.message else None
+    if not chat or chat.type not in {"group", "supergroup"}:
+        await callback.answer()
+        return
+    projects = await project_service.list_for_updates("admin", None)
+    filtered = [p for p in projects if p.get("status") == callback_data.status]
+    if not filtered:
+        await callback.answer(fa.NO_PROJECTS_IN_STATUS, show_alert=True)
+        return
+    lines = [f"📌 پروژه‌های {STATUS_LABELS.get(callback_data.status, callback_data.status)}:"]
+    for proj in filtered:
+        lines.append(f"• {proj['title']}")
+    await callback.answer()
+    await callback.message.answer("\n".join(lines))
 
 

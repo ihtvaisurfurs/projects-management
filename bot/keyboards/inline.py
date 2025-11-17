@@ -1,4 +1,4 @@
-from aiogram.filters.callback_data import CallbackData
+﻿from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -22,11 +22,25 @@ class ProjectActionCallback(CallbackData, prefix="project"):
     action: str
 
 
+class UserActionCallback(CallbackData, prefix="user"):
+    user_id: int
+    action: str
+
+
+class GroupProjectCallback(CallbackData, prefix="gproj"):
+    project_id: int
+
+
+class GroupStatusCallback(CallbackData, prefix="gstatus"):
+    status: str
+
+
 def role_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for role in ROLES:
         label = "👑 ادمین" if role == "admin" else "👨‍💻 برنامه‌نویس"
         builder.button(text=label, callback_data=RoleCallback(value=role))
+        
     builder.adjust(2)
     return builder.as_markup()
 
@@ -91,4 +105,49 @@ def delete_confirmation_keyboard(project_id: int) -> InlineKeyboardMarkup:
         callback_data=ProjectActionCallback(project_id=project_id, action="delete_cancel"),
     )
     builder.adjust(1)
+    return builder.as_markup()
+
+
+def user_list_keyboard(users) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for user in users:
+        status = "✅" if user.get("active", 1) else "🚫"
+        builder.button(
+            text=f"{status} {user['name']}",
+            callback_data=UserActionCallback(user_id=user["id"], action="view"),
+        )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def user_profile_keyboard(user_id: int, is_active: bool) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    action = "deactivate" if is_active else "activate"
+    label = "🚫 غیرفعال کردن" if is_active else "✅ فعال کردن"
+    builder.button(
+        text=label,
+        callback_data=UserActionCallback(user_id=user_id, action=action),
+    )
+    return builder.as_markup()
+
+
+def group_projects_keyboard(projects) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for project in projects:
+        builder.button(
+            text=project["title"],
+            callback_data=GroupProjectCallback(project_id=project["id"]),
+        )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def group_status_filter_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for status in VISIBLE_STATUSES:
+        builder.button(
+            text=STATUS_LABELS.get(status, status),
+            callback_data=GroupStatusCallback(status=status),
+        )
+    builder.adjust(2)
     return builder.as_markup()
