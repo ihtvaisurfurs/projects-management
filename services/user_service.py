@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 
 from core.constants import ROLES
@@ -13,9 +14,10 @@ class UserService:
     async def create_user(self, phone: str, name: str, role: str) -> int:
         if role not in ROLES:
             raise ValueError("نقش انتخاب شده معتبر نیست")
+        created_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         await self._db.execute(
-            "INSERT INTO users(phone, name, role) VALUES (?, ?, ?)",
-            (phone, name, role),
+            "INSERT INTO users(phone, name, role, created_at) VALUES (?, ?, ?, ?)",
+            (phone, name, role, created_at),
         )
         row = await self._db.fetchone("SELECT id FROM users WHERE phone = ?", (phone,))
         return row["id"] if row else 0
