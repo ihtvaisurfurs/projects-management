@@ -80,7 +80,14 @@ class Database:
             if applied:
                 continue
             script = sql_file.read_text(encoding="utf-8")
+            # Skip idempotent migrations if column already exists
             if "telegram_id" in script and await self.column_exists("users", "telegram_id"):
+                await self.execute(
+                    "INSERT INTO schema_migrations(name) VALUES (?)",
+                    (name,),
+                )
+                continue
+            if "created_at" in script and await self.column_exists("users", "created_at"):
                 await self.execute(
                     "INSERT INTO schema_migrations(name) VALUES (?)",
                     (name,),
