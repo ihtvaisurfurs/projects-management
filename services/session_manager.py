@@ -38,6 +38,20 @@ class SessionManager:
     def get_profile(self, user_id: int) -> Optional[dict]:
         return self._profiles.get(user_id)
 
+    async def ensure_profile(self, user_id: int, user_service) -> Optional[dict]:
+        """
+        Validate the cached profile against DB; clears cache if user is missing or inactive.
+        """
+        cached = self._profiles.get(user_id)
+        db_user = await user_service.get_by_telegram(user_id)
+        if not db_user or not db_user.get("active", 1):
+            self.clear_profile(user_id)
+            return None
+        if not cached or cached != db_user:
+            self.set_profile(user_id, db_user)
+            return db_user
+        return cached
+
     def clear_profile(self, user_id: int) -> None:
         updated = self._profiles.pop(user_id, None)
         self._pending_project.pop(user_id, None)

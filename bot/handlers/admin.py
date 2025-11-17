@@ -24,6 +24,7 @@ from bot.keyboards.reply import (
     user_menu_keyboard,
 )
 from bot.texts import fa
+from services.project_formatter import project_profile_text
 from core.constants import BACK_TO_MENU, SKIP_DESCRIPTION_BUTTON, SKIP_OWNER_BUTTON
 from services.logging_service import LogService
 from services.menu_service import MenuService
@@ -35,8 +36,8 @@ from services.validators import is_valid_phone, parse_date
 router = Router()
 
 
-async def _ensure_admin(message: types.Message, session_manager: SessionManager):
-    profile = session_manager.get_profile(message.from_user.id)
+async def _ensure_admin(message: types.Message, session_manager: SessionManager, user_service: UserService):
+    profile = await session_manager.ensure_profile(message.from_user.id, user_service)
     if not profile:
         await message.answer(fa.REQUEST_PHONE, reply_markup=contact_request_keyboard())
         return None
@@ -50,8 +51,8 @@ async def _ensure_admin(message: types.Message, session_manager: SessionManager)
     return profile
 
 
-async def _ensure_admin_callback(callback: types.CallbackQuery, session_manager: SessionManager):
-    profile = session_manager.get_profile(callback.from_user.id)
+async def _ensure_admin_callback(callback: types.CallbackQuery, session_manager: SessionManager, user_service: UserService):
+    profile = await session_manager.ensure_profile(callback.from_user.id, user_service)
     if not profile:
         await callback.answer(fa.UNAUTHORIZED, show_alert=True)
         return None
@@ -65,13 +66,21 @@ async def _ensure_admin_callback(callback: types.CallbackQuery, session_manager:
     return profile
 
 
+async def _notify_group(bot, updates_group_id, project: dict, prefix: str) -> None:
+    if not updates_group_id:
+        return
+    text = f"{prefix}\n{project_profile_text(project)}"
+    await bot.send_message(chat_id=updates_group_id, text=text)
+
+
 @router.message(F.text == "👥 کاربرها")
 async def user_menu(
     message: types.Message,
     state: FSMContext,
     session_manager: SessionManager,
+    user_service: UserService,
 ):
-    profile = await _ensure_admin(message, session_manager)
+    profile = await _ensure_admin(message, session_manager, user_service)
     if not profile:
         return
     await state.clear()
@@ -85,7 +94,7 @@ async def list_users(
     user_service: UserService,
     log_service: LogService,
 ):
-    profile = await _ensure_admin(message, session_manager)
+    profile = await _ensure_admin(message, session_manager, user_service)
     if not profile:
         return
     users = await user_service.list_users()
@@ -107,7 +116,7 @@ async def handle_user_actions(
     session_manager: SessionManager,
     log_service: LogService,
 ):
-    profile = await _ensure_admin_callback(callback, session_manager)
+    profile = await _ensure_admin_callback(callback, session_manager, user_service)
     if not profile:
         return
     user = await user_service.get_by_id(callback_data.user_id)
@@ -155,8 +164,9 @@ async def new_user_entry(
     message: types.Message,
     state: FSMContext,
     session_manager: SessionManager,
+    user_service: UserService,
 ):
-    profile = await _ensure_admin(message, session_manager)
+    profile = await _ensure_admin(message, session_manager, user_service)
     if not profile:
         return
     await state.set_state(AdminCreateUser.waiting_phone)
@@ -179,6 +189,7 @@ async def capture_user_name(
     message: types.Message,
     state: FSMContext,
     session_manager: SessionManager,
+    user_service: UserService,
 ):
     name = message.text.strip()
     if len(name) < 3:
@@ -204,7 +215,7 @@ async def select_user_role(
     menu_service: MenuService,
     log_service: LogService,
 ):
-    profile = await _ensure_admin_callback(callback, session_manager)
+    profile = await _ensure_admin_callback(callback, session_manager, user_service)
     if not profile:
         return
     data = await state.get_data()
@@ -230,8 +241,9 @@ async def create_project_entry(
     message: types.Message,
     state: FSMContext,
     session_manager: SessionManager,
+    user_service: UserService,
 ):
-    profile = await _ensure_admin(message, session_manager)
+    profile = await _ensure_admin(message, session_manager, user_service)
     if not profile:
         return
     await state.set_state(AdminCreateProject.waiting_title)
@@ -279,7 +291,7 @@ async def select_project_status(
     session_manager: SessionManager,
     user_service: UserService,
 ):
-    profile = await _ensure_admin_callback(callback, session_manager)
+    profile = await _ensure_admin_callback(callback, session_manager, user_service)
     if not profile:
         return
     await state.update_data(project_status=callback_data.value)
@@ -308,7 +320,7 @@ async def select_project_owner(
     user_service: UserService,
     session_manager: SessionManager,
 ):
-    profile = await _ensure_admin_callback(callback, session_manager)
+    profile = await _ensure_admin_callback(callback, session_manager, user_service)
     if not profile:
         return
     user = await user_service.get_by_id(callback_data.user_id)
@@ -334,10 +346,12 @@ async def capture_start_date(
     session_manager: SessionManager,
     log_service: LogService,
     menu_service: MenuService,
+    user_service: UserService,
+    updates_group_id: int | None,
 ):
     if message.text == BACK_TO_MENU:
         await state.clear()
-        profile = session_manager.get_profile(message.from_user.id)
+        profile = await session_manager.ensure_profile(message.from_user.id, user_service)
         if profile:
             await menu_service.show_main_menu(message, profile)
         else:
@@ -354,8 +368,8 @@ async def capture_start_date(
         await state.set_state(AdminCreateProject.waiting_end_date)
         await message.answer(fa.ASK_PROJECT_END_DATE)
         return
-    profile = session_manager.get_profile(message.from_user.id)
-    await project_service.create_project(
+    profile = await session_manager.ensure_profile(message.from_user.id, user_service)
+    project_id = await project_service.create_project(
         title=data.get("project_title"),
         description=data.get("project_description", ""),
         status=data.get("project_status"),
@@ -363,6 +377,9 @@ async def capture_start_date(
         start_date=formatted,
     )
     await log_service.info(f"ادمین {profile['name']} پروژه‌ای جدید ایجاد کرد ({data.get('project_title')})")
+    new_project = await project_service.get_project(project_id)
+    if new_project:
+        await _notify_group(message.bot, updates_group_id, new_project, "پروژه جدید ایجاد شد")
     await state.clear()
     await message.answer(fa.PROJECT_CREATED)
     await menu_service.show_main_menu(message, profile)
@@ -376,6 +393,8 @@ async def capture_end_date(
     session_manager: SessionManager,
     log_service: LogService,
     menu_service: MenuService,
+    user_service: UserService,
+    updates_group_id: int | None,
 ):
     formatted = parse_date(message.text)
     if not formatted:
@@ -389,8 +408,8 @@ async def capture_end_date(
         if end_dt < start_dt:
             await message.answer(fa.INVALID_END_BEFORE_START)
             return
-    profile = session_manager.get_profile(message.from_user.id)
-    await project_service.create_project(
+    profile = await session_manager.ensure_profile(message.from_user.id, user_service)
+    project_id = await project_service.create_project(
         title=data.get("project_title"),
         description=data.get("project_description", ""),
         status=data.get("project_status"),
@@ -399,6 +418,9 @@ async def capture_end_date(
         end_date=formatted,
     )
     await log_service.info(f"ادمین {profile['name']} پروژه‌ای جدید ایجاد کرد ({data.get('project_title')})")
+    new_project = await project_service.get_project(project_id)
+    if new_project:
+        await _notify_group(message.bot, updates_group_id, new_project, "پروژه جدید ایجاد شد")
     await state.clear()
     await message.answer(fa.PROJECT_CREATED)
     await menu_service.show_main_menu(message, profile)
