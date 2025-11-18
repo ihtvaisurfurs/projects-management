@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 import asyncio
 from pathlib import Path
 from typing import Any, Iterable, List, Optional
@@ -88,6 +88,12 @@ class Database:
                 )
                 continue
             if "created_at" in script and await self.column_exists("users", "created_at"):
+                await self.execute(
+                    "INSERT INTO schema_migrations(name) VALUES (?)",
+                    (name,),
+                )
+                continue
+            if "active" in script and await self.column_exists("users", "active"):
                 await self.execute(
                     "INSERT INTO schema_migrations(name) VALUES (?)",
                     (name,),

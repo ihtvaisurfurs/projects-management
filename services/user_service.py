@@ -16,14 +16,16 @@ class UserService:
             raise ValueError("نقش انتخاب شده معتبر نیست")
         created_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         await self._db.execute(
-            "INSERT INTO users(phone, name, role, created_at) VALUES (?, ?, ?, ?)",
+            "INSERT INTO users(phone, name, role, created_at, active) VALUES (?, ?, ?, ?, 1)",
             (phone, name, role, created_at),
         )
         row = await self._db.fetchone("SELECT id FROM users WHERE phone = ?", (phone,))
         return row["id"] if row else 0
 
     async def list_users(self) -> List[dict]:
-        return await self._db.fetchall("SELECT * FROM users ORDER BY name ASC")
+        return await self._db.fetchall(
+            "SELECT id, name, phone, role, telegram_id, created_at, active FROM users ORDER BY name ASC"
+        )
 
     async def get_by_name(self, name: str) -> Optional[dict]:
         return await self._db.fetchone("SELECT * FROM users WHERE name = ?", (name,))
@@ -38,4 +40,10 @@ class UserService:
         await self._db.execute(
             "UPDATE users SET telegram_id = ? WHERE id = ?",
             (telegram_id, user_id),
+        )
+
+    async def set_active(self, user_id: int, active: bool) -> None:
+        await self._db.execute(
+            "UPDATE users SET active = ? WHERE id = ?",
+            (1 if active else 0, user_id),
         )

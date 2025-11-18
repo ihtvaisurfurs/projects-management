@@ -1,0 +1,23 @@
+# 1) Error logging split (bot.json + errors.json)
+git add services/logging_service.py
+git commit -m "Add errors.json log sink for error entries"
+
+# 2) End-date required for done status (creation + updates)
+git add services/validators.py bot/fsm/states.py bot/texts/fa.py bot/handlers/admin.py bot/handlers/projects.py
+git commit -m "Enforce end date when projects are marked done"
+
+# 3) Owner history + soft delete + new status option
+git add services/project_service.py core/constants.py bot/keyboards/inline.py data/migrations/004_owner_history_and_deleted.sql data/migrations/005_fix_owner_history_fk.sql
+git commit -m "Track project owner history and support soft delete"
+
+# 4) Housekeeping (gitignore and env example, if not committed yet)
+git add .gitignore .env.example
+git commit -m "Add gitignore and env example"
+
+# 5) Add created_at to users and populate existing rows
+git add data/migrations/006_add_user_created_at.sql services/user_service.py
+git commit -m "Store user created_at timestamp"
+
+# 6) Add admin user management submenu with user list
+git add core/constants.py bot/keyboards/reply.py bot/texts/fa.py bot/handlers/admin.py
+git commit -m "Add admin user management submenu with user list"
