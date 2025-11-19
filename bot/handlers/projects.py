@@ -4,6 +4,7 @@ from html import escape
 from aiogram import F, Router, types
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
 from bot.fsm.states import (
     ProjectDescriptionUpdate,
@@ -53,7 +54,10 @@ async def _notify_group(bot, updates_group_id, project: dict, prefix: str) -> No
     if not updates_group_id:
         return
     text = f"{prefix}\n{project_profile_text(project)}"
-    await bot.send_message(chat_id=updates_group_id, text=text)
+    try:
+        await bot.send_message(chat_id=updates_group_id, text=text)
+    except (TelegramBadRequest, TelegramForbiddenError):
+        pass
 
 
 async def _load_project(

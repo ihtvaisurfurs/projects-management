@@ -23,6 +23,8 @@ from bot.keyboards.reply import (
     owner_skip_keyboard,
     user_menu_keyboard,
 )
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+
 from bot.texts import fa
 from services.project_formatter import project_profile_text
 from core.constants import BACK_TO_MENU, SKIP_DESCRIPTION_BUTTON, SKIP_OWNER_BUTTON
@@ -70,7 +72,10 @@ async def _notify_group(bot, updates_group_id, project: dict, prefix: str) -> No
     if not updates_group_id:
         return
     text = f"{prefix}\n{project_profile_text(project)}"
-    await bot.send_message(chat_id=updates_group_id, text=text)
+    try:
+        await bot.send_message(chat_id=updates_group_id, text=text)
+    except (TelegramBadRequest, TelegramForbiddenError):
+        pass
 
 
 @router.message(F.text == "👥 کاربرها")
