@@ -18,20 +18,24 @@ PROGRAMMER_MENU_BUTTONS = [
     BACK_TO_MENU,
 ]
 ROLES = ("admin", "programmer")
-STATUS_CHOICES = ["pending", "MVP", "support_update", "done", "deleted"]
-VISIBLE_STATUSES = ["pending", "MVP", "support_update", "done"]
+STATUS_CHOICES = ["pending", "in_progress", "MVP", "support_update", "done", "failed", "deleted"]
+VISIBLE_STATUSES = ["pending", "in_progress", "MVP", "support_update", "done", "failed"]
 STATUS_LABELS = {
     "pending": "🟡 در انتظار",
+    "in_progress": "🚧 درحال انجام",
     "MVP": "🟢 نسخه MVP",
     "support_update": "🔧 پشتیبانی و ارتقا",
     "done": "✅ تکمیل شده",
+    "failed": "❌ شکست خورده",
     "deleted": "🗑 حذف شده",
 }
 PROJECT_GROUP_LABELS = {
     "pending": "پروژه‌های تعریف شده",
+    "in_progress": "پروژه‌های درحال انجام",
     "MVP": "پروژه‌های MVP",
     "support_update": "پروژه‌های درحال پشتیبانی و ارتقای عملکرد",
     "done": "پروژه‌های تکمیل شده",
+    "failed": "پروژه‌های شکست خورده",
 }
 SKIP_OWNER_BUTTON = "🚫 عدم انتخاب مسئول"
 SKIP_DESCRIPTION_BUTTON = "⏭️ بدون توضیحات"

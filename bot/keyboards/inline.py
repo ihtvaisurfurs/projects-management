@@ -31,7 +31,7 @@ class GroupProjectCallback(CallbackData, prefix="gproj"):
     project_id: int
 
 
-class GroupStatusCallback(CallbackData, prefix="gstatus"):
+class StatusFilterCallback(CallbackData, prefix="statusfilter"):
     status: str
 
 
@@ -142,12 +142,12 @@ def group_projects_keyboard(projects) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def group_status_filter_keyboard() -> InlineKeyboardMarkup:
+def status_filter_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for status in VISIBLE_STATUSES:
         builder.button(
             text=STATUS_LABELS.get(status, status),
-            callback_data=GroupStatusCallback(status=status),
+            callback_data=StatusFilterCallback(status=status),
         )
     builder.adjust(2)
     return builder.as_markup()

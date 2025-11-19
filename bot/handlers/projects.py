@@ -13,13 +13,13 @@ from bot.fsm.states import (
 )
 from bot.keyboards.inline import (
     GroupProjectCallback,
-    GroupStatusCallback,
+    StatusFilterCallback,
     OwnerCallback,
     ProjectActionCallback,
     StatusCallback,
     delete_confirmation_keyboard,
     group_projects_keyboard,
-    group_status_filter_keyboard,
+    status_filter_keyboard,
     owner_keyboard,
     project_profile_keyboard,
     status_keyboard,
@@ -114,6 +114,10 @@ async def show_project_links(
     ]
     response = "\n".join([fa.UPDATE_SELECT_PROJECT, *items])
     await message.answer(response, disable_web_page_preview=True)
+    await message.answer(
+        "فیلتر بر اساس وضعیت:",
+        reply_markup=status_filter_keyboard(),
+    )
     await log_service.info(f"{profile['name']} فهرست پروژه‌ها را مشاهده کرد")
 
 
@@ -142,7 +146,7 @@ async def group_status(
     )
     await message.answer(
         "فیلتر بر اساس وضعیت:",
-        reply_markup=group_status_filter_keyboard(),
+        reply_markup=status_filter_keyboard(),
     )
     await log_service.info(f"{profile['name']} فهرست پروژه‌ها را در گروه {message.chat.id} ارسال کرد")
 
@@ -438,25 +442,50 @@ async def show_group_project(
     await callback.message.answer(project_profile_text(project))
 
 
-@router.callback_query(GroupStatusCallback.filter())
-async def show_projects_by_status(
+@router.callback_query(StatusFilterCallback.filter())
+async def handle_status_filter(
     callback: types.CallbackQuery,
-    callback_data: GroupStatusCallback,
+    callback_data: StatusFilterCallback,
     project_service: ProjectService,
+    session_manager: SessionManager,
+    user_service: UserService,
+    bot_username: str,
 ):
     chat = callback.message.chat if callback.message else None
-    if not chat or chat.type not in {"group", "supergroup"}:
+    if not chat:
         await callback.answer()
         return
-    projects = await project_service.list_for_updates("admin", None)
+    if chat.type in {"group", "supergroup"}:
+        profile = await session_manager.ensure_profile(callback.from_user.id, user_service)
+        if not profile or profile.get("role") != "admin":
+            await callback.answer()
+            return
+        projects = await project_service.list_for_updates("admin", None)
+        filtered = [p for p in projects if p.get("status") == callback_data.status]
+        if not filtered:
+            await callback.answer(fa.NO_PROJECTS_IN_STATUS, show_alert=True)
+            return
+        await callback.answer()
+        await callback.message.answer(
+            f"📌 پروژه‌های {STATUS_LABELS.get(callback_data.status, callback_data.status)}:",
+            reply_markup=group_projects_keyboard(filtered),
+        )
+        return
+    profile = await session_manager.ensure_profile(callback.from_user.id, user_service)
+    if not profile:
+        await callback.answer(fa.REQUEST_PHONE, show_alert=True)
+        return
+    projects = await project_service.list_for_updates(profile.get("role"), profile.get("name"))
     filtered = [p for p in projects if p.get("status") == callback_data.status]
     if not filtered:
         await callback.answer(fa.NO_PROJECTS_IN_STATUS, show_alert=True)
         return
-    lines = [f"📌 پروژه‌های {STATUS_LABELS.get(callback_data.status, callback_data.status)}:"]
-    for proj in filtered:
-        lines.append(f"• {proj['title']}")
+    items = [
+        f"• <a href=\"https://t.me/{bot_username}?start=project_{proj['id']}\">{escape(proj['title'])}</a>"
+        for proj in filtered
+    ]
+    text = "\n".join([fa.UPDATE_SELECT_PROJECT, *items])
     await callback.answer()
-    await callback.message.answer("\n".join(lines))
+    await callback.message.answer(text, disable_web_page_preview=True)
 
 
