@@ -28,12 +28,15 @@ def format_project_block(title: str, projects: List[Dict]) -> str:
     lines = [f"\n🔸 {title}:"]
     for project in projects:
         owner = project.get("owner_name") or "—"
+        version = project.get("version", "0")
+        version_date = project.get("version_updated_at") or "—"
         end_date = project.get("end_date")
         base = (
             f"• {project['title']}\n"
             f"  🧑‍💻 مسئول: {owner}\n"
             f"  📌 وضعیت: {human_status(project['status'])}\n"
-            f"  🗓 شروع: {project['start_date']}"
+            f"  🗓 شروع: {project['start_date']}\n"
+            f"  🧩 ورژن: {version} (تاریخ: {version_date})"
         )
         if end_date:
             base += f"\n  ✅ پایان: {end_date}"
