@@ -33,7 +33,7 @@ from services.menu_service import MenuService
 from services.project_service import ProjectService
 from services.session_manager import SessionManager
 from services.user_service import UserService
-from services.validators import is_valid_phone, parse_date
+from services.validators import is_valid_phone, parse_date, parse_version
 
 router = Router()
 
@@ -370,8 +370,15 @@ async def capture_start_date(
     await state.update_data(project_start_date=formatted)
     data = await state.get_data()
     if data.get("project_status") == "done":
-        await state.set_state(AdminCreateProject.waiting_end_date)
-        await message.answer(fa.ASK_PROJECT_END_DATE)
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        end_date = formatted
+        if formatted > today:
+            end_date = formatted
+        else:
+            end_date = today
+        await state.update_data(project_end_date=end_date)
+        await state.set_state(AdminCreateProject.waiting_version)
+        await message.answer(fa.ASK_PROJECT_VERSION)
         return
     profile = await session_manager.ensure_profile(message.from_user.id, user_service)
     project_id = await project_service.create_project(
@@ -413,14 +420,41 @@ async def capture_end_date(
         if end_dt < start_dt:
             await message.answer(fa.INVALID_END_BEFORE_START)
             return
-    profile = await session_manager.ensure_profile(message.from_user.id, user_service)
+    await state.update_data(project_end_date=formatted)
+    await state.set_state(AdminCreateProject.waiting_version)
+    await message.answer(fa.ASK_PROJECT_VERSION)
+
+
+@router.message(AdminCreateProject.waiting_version)
+async def capture_project_version(
+    message: types.Message,
+    state: FSMContext,
+    project_service: ProjectService,
+    session_manager: SessionManager,
+    log_service: LogService,
+    menu_service: MenuService,
+    user_service: UserService,
+    updates_group_id: int | None,
+):
+    version = parse_version(message.text)
+    if not version:
+        await message.answer(fa.INVALID_VERSION)
+        return
+    data = await state.get_data()
+    start_date = data.get("project_start_date") or ""
+    end_date = data.get("project_end_date") or start_date
+    profile = await _ensure_admin(message, session_manager, user_service)
+    if not profile:
+        return
     project_id = await project_service.create_project(
         title=data.get("project_title"),
         description=data.get("project_description", ""),
         status=data.get("project_status"),
         owner_name=data.get("project_owner"),
-        start_date=start_date or formatted,
-        end_date=formatted,
+        start_date=start_date or end_date,
+        end_date=end_date,
+        version=version,
+        version_date=end_date,
     )
     await log_service.info(f"ادمین {profile['name']} پروژه‌ای جدید ایجاد کرد ({data.get('project_title')})")
     new_project = await project_service.get_project(project_id)

@@ -33,7 +33,7 @@ from services.project_formatter import project_profile_text
 from services.project_service import ProjectService
 from services.session_manager import SessionManager
 from services.user_service import UserService
-from services.validators import parse_date
+from services.validators import parse_date, parse_version
 
 router = Router()
 
@@ -265,9 +265,16 @@ async def update_status(
         await callback.answer()
         return
     if callback_data.value == "done":
-        await state.update_data(edit_project_id=project_id, new_status="done")
-        await state.set_state(ProjectStatusUpdate.waiting_end_date)
-        await callback.message.answer(fa.ASK_PROJECT_END_DATE)
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        start_date = project.get("start_date")
+        # اطمینان از اینکه تاریخ پایان قبل از شروع نباشد
+        if start_date and start_date > today:
+            end_date = start_date
+        else:
+            end_date = today
+        await state.update_data(edit_project_id=project_id, new_status="done", project_end_date=end_date)
+        await state.set_state(ProjectStatusUpdate.waiting_version)
+        await callback.message.answer(fa.ASK_PROJECT_VERSION)
         await callback.answer()
         return
     await project_service.update_status(project_id, callback_data.value)
@@ -313,7 +320,49 @@ async def capture_status_end_date(
         if end_dt < start_dt:
             await message.answer(fa.INVALID_END_BEFORE_START)
             return
-    await project_service.update_status(project_id, "done", end_date=formatted)
+    await state.update_data(project_end_date=formatted)
+    await state.set_state(ProjectStatusUpdate.waiting_version)
+    await message.answer(fa.ASK_PROJECT_VERSION)
+
+
+@router.message(ProjectStatusUpdate.waiting_version)
+async def capture_status_version(
+    message: types.Message,
+    state: FSMContext,
+    project_service: ProjectService,
+    session_manager: SessionManager,
+    log_service: LogService,
+    user_service: UserService,
+    updates_group_id: int | None,
+):
+    version = parse_version(message.text)
+    if not version:
+        await message.answer(fa.INVALID_VERSION)
+        return
+    data = await state.get_data()
+    project_id = data.get("edit_project_id")
+    end_date = data.get("project_end_date")
+    if not project_id or not end_date:
+        await message.answer(fa.GENERIC_ERROR)
+        await state.clear()
+        return
+    project, profile = await _load_project(
+        project_id,
+        message.from_user.id,
+        project_service,
+        session_manager,
+        user_service,
+        message,
+    )
+    if not project:
+        return
+    await project_service.update_status(
+        project_id,
+        "done",
+        end_date=end_date,
+        version=version,
+        version_date=end_date,
+    )
     updated = await project_service.get_project(project_id)
     await log_service.info(f"{profile['name']} وضعیت پروژه {project_id} را به‌روزرسانی کرد")
     await _notify_group(message.bot, updates_group_id, updated, "پروژه آپدیت شد")
