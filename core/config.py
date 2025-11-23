@@ -47,7 +47,8 @@ class Settings:
     @classmethod
     def load(cls) -> "Settings":
         token = os.getenv("BOT_TOKEN", "").strip()
-        username = os.getenv("BOT_USERNAME", "").strip()
+        raw_username = os.getenv("BOT_USERNAME", "").strip()
+        username = raw_username.lstrip("@")
         if not token:
             raise ValueError("BOT_TOKEN در فایل .env تعریف نشده است")
         if not username:
