@@ -6,6 +6,7 @@ from core.constants import DATE_FORMATS
 
 PHONE_PATTERN = re.compile(r"^\+\d{10,15}$")
 DATE_PATTERN = re.compile(r"^\d{4}([/-])(0[1-9]|1[0-2])\1(0[1-9]|[12][0-9]|3[01])$")
+VERSION_PATTERN = re.compile(r"^\d+(?:\.\d+)*$")
 
 
 def is_valid_phone(phone: str) -> bool:
@@ -27,3 +28,10 @@ def parse_date(value: str) -> Optional[str]:
 
 def parse_start_date(value: str) -> Optional[str]:
     return parse_date(value)
+
+
+def parse_version(value: str) -> Optional[str]:
+    cleaned = value.strip()
+    if not VERSION_PATTERN.match(cleaned):
+        return None
+    return cleaned
