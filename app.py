@@ -97,6 +97,7 @@ async def main() -> None:
             "log_service": log_service,
             "bot_username": settings.bot_username,
             "updates_group_id": settings.updates_group_id,
+            "enable_group_id_command": settings.enable_group_id_command,
         }
     )
 

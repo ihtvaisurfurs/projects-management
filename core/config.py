@@ -43,6 +43,7 @@ class Settings:
     telegram_request_timeout: float
     telegram_retry_delay: float
     updates_group_id: Optional[int]
+    enable_group_id_command: bool
 
     @classmethod
     def load(cls) -> "Settings":
@@ -67,4 +68,5 @@ class Settings:
             telegram_request_timeout=_float_env("TELEGRAM_REQUEST_TIMEOUT", 60.0),
             telegram_retry_delay=_float_env("TELEGRAM_RETRY_DELAY", 5.0),
             updates_group_id=group_id,
+            enable_group_id_command=_bool_env("ENABLE_GROUP_ID_COMMAND", True),
         )
